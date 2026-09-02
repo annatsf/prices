@@ -93,9 +93,6 @@ CHINT_DISCOUNT      = float(_cfg("CHINT_DISCOUNT", "0.0"))  # додаткова
 # на кабельно-провідниковій продукції.
 CHINT_SKIP_TYPE_KEYWORDS = ETI_SKIP_TYPE_KEYWORDS
 
-MAX_SITES        = 5                  # перевіряємо перші 20 сайтів (за інструкцією)
-REQUEST_DELAY    = 4.0                # пауза між запитами (сек) — більше = рідше капча
-HEADLESS_BROWSER = False               # False = видно браузер під час пошуку
 
 # Сайти що ІГНОРУЄМО при пошуку цін
 SKIP_PRICE_SITES = ["alibaba.com", "aliexpress.com", "eti.ua", "olx.ua"]
@@ -133,24 +130,9 @@ SKIP_ITEMS = [
 #     "KBE Solar DB+ 6,00 Q verz EN 50618, IEC 62930, 2 PFG 1169/10.19 black (SW)"
 ]
 
-# Сайти для пошуку (порядок = пріоритет)
-SEARCH_SITES = [
-    {"name": "Isolar",       "url": "https://isolar.com.ua/search/?q={q}"},
-    {"name": "Eleksun",      "url": "https://eleksun.com.ua/search/?q={q}"},
-    {"name": "Ecshop",       "url": "https://ecshop.com.ua/ua/search/?text={q}"},
-    {"name": "001",          "url": "https://001.com.ua/ua/search?query={q}"},
-    {"name": "Electrocontrol","url": "https://electrocontrol.com.ua/ua/search?search_term={q}"},
-    {"name": "Electrovoz",   "url": "https://electrovoz.com.ua/ua/search?search_term={q}"},
-    {"name": "E-server",     "url": "https://e-server.com.ua/ua/search?search_term={q}"},
-    {"name": "Sunservis",    "url": "https://sunservis.com.ua/ua/search?search_term={q}"},
-    {"name": "Abatareykin",  "url": "https://abatareykin.kiev.ua/ua/search?search_term={q}"},
-    {"name": "Agart",        "url": "https://agart.ua/ua/search?search_term={q}"},
-    {"name": "Pulsepro",     "url": "https://pulsepro.com.ua/ua/search?search_term={q}"},
-    {"name": "Acko",         "url": "https://agart.ua/ua/search?search_term={q}"},
-    {"name": "Energomotive", "url": "https://energomotive.com.ua/ua/search?search_term={q}"},
-    #{"name": "Amperok",    "url": "https://amperok.com.ua/ua/search?search_term={q}"},
-    {"name": "Cms",          "url": "https://cms.ua/ua/search?search_term={q}"},
-]
+# Пошук у інтернеті йде через Serper (Google Shopping + органічна видача),
+# а не обходом окремих сайтів. Список магазинів лишався з попередньої версії
+# на Playwright і не використовувався — прибрано.
 # ───────────────────────────────────────────────────────────
 
 import asyncio
@@ -234,8 +216,20 @@ def get_credentials():
     if sa_env or sa_path.exists():
         from google.oauth2 import service_account
         if sa_env:
+            try:
+                sa_info = json.loads(sa_env)
+            except json.JSONDecodeError as ex:
+                head = sa_env[:60].replace(chr(10), " ")
+                raise SystemExit(
+                    f"\n{Fore.RED}[X] GOOGLE_SERVICE_ACCOUNT_JSON - це не JSON ({ex}).{Style.RESET_ALL}\n"
+                    f"   Початок значення: {head!r}\n"
+                    "   Має починатися з { і містити \"type\": \"service_account\".\n"
+                    "   Streamlit: секрет пишеться в ПОТРІЙНИХ ОДИНАРНИХ лапках:\n"
+                    "       GOOGLE_SERVICE_ACCOUNT_JSON = '''<увесь вміст JSON-файлу>'''\n"
+                    "   GitHub Actions: вставити вміст файлу як є, без лапок.\n"
+                ) from None
             creds = service_account.Credentials.from_service_account_info(
-                json.loads(sa_env), scopes=SCOPES)
+                sa_info, scopes=SCOPES)
             print(f"{Fore.GREEN}✅ Авторизація через сервісний акаунт (секрет оточення)")
         else:
             creds = service_account.Credentials.from_service_account_file(
@@ -1248,7 +1242,9 @@ class SpecSheet:
 
             # Ціна (UAH)
             price_a1 = gspread.utils.rowcol_to_a1(row, col_price + 1)
-            updates.append({"range": price_a1, "values": [[price]]})
+            # price=None → комірка очищується. Нуль у колонці ціни виглядає
+            # як «безкоштовно» і мовчки занижує підсумки кошторису.
+            updates.append({"range": price_a1, "values": [["" if price is None else price]]})
 
             # Постачальник (якщо знайдено)
             if col_supp is not None:
@@ -1262,7 +1258,8 @@ class SpecSheet:
 
             # Batch update (один виклик API)
             self.ws.batch_update(updates, value_input_option="USER_ENTERED")
-            print(f"   {Fore.GREEN}📝 Записано рядок {row}: {price:,.2f} грн → {price_a1}{Style.RESET_ALL}")
+            shown = "— (очищено)" if price is None else f"{price:,.2f} грн"
+            print(f"   {Fore.GREEN}📝 Записано рядок {row}: {shown} → {price_a1}{Style.RESET_ALL}")
 
         except gspread.exceptions.APIError as ex:
             print(f"   {Fore.RED}❌ Google API помилка запису: {ex}{Style.RESET_ALL}")
@@ -1396,9 +1393,9 @@ async def run(sheet_url: str):
             spec.write_result(item, price, "інтернет", prefix + note)
             stats["web"] += 1
         else:
-            not_found = "⚠ Ціну не знайдено на перших 3 сайтах — уточнити вручну"
+            not_found = "⚠ Ціну не знайдено (Google Shopping + органічна видача) — уточнити вручну"
             print(f"   {Fore.YELLOW}⚠  Не знайдено{Style.RESET_ALL}")
-            spec.write_result(item, 0, "", prefix + not_found)
+            spec.write_result(item, None, "", prefix + not_found)
             stats["notfound"] += 1
 
         await asyncio.sleep(3.0)   # пауза між позиціями — щоб Google рідше показував капчу
