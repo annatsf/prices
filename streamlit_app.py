@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-EScore — Streamlit-застосунок «Оновлення цін».
+Streamlit-застосунок «Оновлення цін».
  
 Будь-який користувач (зокрема на Windows) відкриває посилання у браузері й
 натискає кнопку — скрипт знаходить ціни і записує їх у Google-таблицю.
@@ -38,9 +38,9 @@ import price_finder
  
 _ANSI = re.compile(r"\x1b\[[0-9;]*m")   # для очищення кольорових кодів у журналі
  
-st.set_page_config(page_title="EScore — Оновлення цін", page_icon="⚡")
+st.set_page_config(page_title="Оновлення цін", page_icon="⚡")
  
-st.title("⚡ EScore — Оновлення цін СЕС")
+st.title("⚡ Оновлення цін СЕС")
 st.caption(
     "Натисни кнопку — скрипт знайде актуальні ціни (прайс ETI + прайс CHINT + Serper, якщо увімкнено) "
     "і запише їх у таблицю. Заповнюються лише порожні комірки."
@@ -115,4 +115,4 @@ if st.button("🔄 Оновити ціни", type="primary"):
         st.error(f"❌ Помилка: {err}")
  
 st.divider()
-st.caption("Доступ до застосунку — лише для співробітників EScore.")
+st.caption("Доступ до застосунку — за посиланням.")
