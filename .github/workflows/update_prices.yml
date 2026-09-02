@@ -1,0 +1,46 @@
+name: Оновлення цін СЕС
+
+on:
+  schedule:
+    # 1-го та 15-го числа кожного місяця о 01:00 UTC (≈ 03:00–04:00 за Києвом).
+    - cron: "0 1 1,15 * *"
+  workflow_dispatch: {}   # кнопка ручного запуску у вкладці Actions
+
+jobs:
+  update-prices:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Завантажити код
+        uses: actions/checkout@v4
+
+      - name: Налаштувати Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Встановити залежності
+        run: pip install -r requirements.txt
+
+      - name: Оновити ціни
+        env:
+          # ── Обов'язкові секрети (Settings → Secrets and variables → Actions → Secrets)
+          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+          SHEET_URL: ${{ secrets.SHEET_URL }}
+
+          # ── Необов'язковий: без нього інтернет-пошук просто вимкнений,
+          #    ціни беруться лише з прайсів ETI і CHINT.
+          SERPER_API_KEY: ${{ secrets.SERPER_API_KEY }}
+
+          # ── Налаштування (Variables, не Secrets — це не таємниці).
+          #    Незадана змінна = значення за замовчуванням з конфігу price_finder.py.
+          PRICE_FOLDER_ID: ${{ vars.PRICE_FOLDER_ID }}
+          ETI_FILE_SEARCH: ${{ vars.ETI_FILE_SEARCH }}
+          ETI_TAB_NAME: ${{ vars.ETI_TAB_NAME }}
+          ETI_DISCOUNT: ${{ vars.ETI_DISCOUNT }}
+          CHINT_FILE_SEARCH: ${{ vars.CHINT_FILE_SEARCH }}
+          CHINT_TAB_NAME: ${{ vars.CHINT_TAB_NAME }}
+          CHINT_DISCOUNT: ${{ vars.CHINT_DISCOUNT }}
+        run: python price_finder.py
