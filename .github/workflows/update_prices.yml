@@ -1,12 +1,23 @@
 name: Оновлення цін СЕС
 
+# Коли запускати:
+#  • за розкладом — щопонеділка; скрипт сам пропускає запуск, якщо з останнього
+#    оновлення (клітинка J1) минуло менше 13 днів → фактично раз на два тижні;
+#  • вручну — кнопка «Run workflow» тут або меню «Оновити ціни» в таблиці.
 on:
-  workflow_dispatch: {}   # кнопка ручного запуску у вкладці Actions
+  schedule:
+    - cron: "0 4 * * 1"      # понеділок 04:00 UTC ≈ 07:00 за Києвом
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Пробний запуск: нічого не записувати в таблицю"
+        type: boolean
+        default: false
 
 jobs:
   update-prices:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 30
 
     steps:
       - name: Завантажити код
@@ -16,28 +27,23 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-          cache: pip
 
       - name: Встановити залежності
         run: pip install -r requirements.txt
 
       - name: Оновити ціни
         env:
-          # ── Обов'язкові секрети (Settings → Secrets and variables → Actions → Secrets)
           GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
           SHEET_URL: ${{ secrets.SHEET_URL }}
-
-          # ── Необов'язковий: без нього інтернет-пошук просто вимкнений,
-          #    ціни беруться лише з прайсів ETI і CHINT.
-          SERPER_API_KEY: ${{ secrets.SERPER_API_KEY }}
-
-          # ── Налаштування (Variables, не Secrets — це не таємниці).
-          #    Незадана змінна = значення за замовчуванням з конфігу price_finder.py.
+          # необов'язково: без DATABASE_URL оновлюється лише таблиця
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          # Variables (не секрети); незадана = значення з price_finder.py
           PRICE_FOLDER_ID: ${{ vars.PRICE_FOLDER_ID }}
-          ETI_FILE_SEARCH: ${{ vars.ETI_FILE_SEARCH }}
-          ETI_TAB_NAME: ${{ vars.ETI_TAB_NAME }}
+          PRICE_SOURCE: ${{ vars.PRICE_SOURCE }}
           ETI_DISCOUNT: ${{ vars.ETI_DISCOUNT }}
-          CHINT_FILE_SEARCH: ${{ vars.CHINT_FILE_SEARCH }}
-          CHINT_TAB_NAME: ${{ vars.CHINT_TAB_NAME }}
           CHINT_DISCOUNT: ${{ vars.CHINT_DISCOUNT }}
+          BDK_DISCOUNT: ${{ vars.BDK_DISCOUNT }}
+          BDK_VAT: ${{ vars.BDK_VAT }}
+          SCHEDULED: ${{ github.event_name == 'schedule' && '1' || '' }}
+          DRY_RUN: ${{ inputs.dry_run && '1' || '' }}
         run: python price_finder.py
