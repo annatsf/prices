@@ -7,7 +7,7 @@ Streamlit-застосунок «Оновлення цін».
 натискає кнопку — скрипт знаходить ціни і записує їх у Google-таблицю.
 Встановлювати Python не потрібно: застосунок працює у хмарі Streamlit.
  
-Секрети (посилання на таблицю, ключ Serper, ключ сервісного акаунта) беруться
+Секрети (посилання на таблицю, id папки з прайсами, ключ сервісного акаунта) беруться
 зі сховища Streamlit Cloud (Settings → Secrets) і прокидаються у змінні
 оточення, які читає price_finder.
 """
@@ -19,16 +19,15 @@ import time
 import streamlit as st
  
 # ── Секрети зі сховища Streamlit → у змінні оточення ───────────────
-# (price_finder читає SHEET_URL, SERPER_API_KEY, GOOGLE_SERVICE_ACCOUNT_JSON з env)
+# (price_finder читає SHEET_URL, PRICE_FOLDER_ID, GOOGLE_SERVICE_ACCOUNT_JSON з env)
 try:
     _secrets = dict(st.secrets)
 except Exception:
     _secrets = {}
 for _key in (
-    "SHEET_URL", "SERPER_API_KEY", "GOOGLE_SERVICE_ACCOUNT_JSON",
-    "PRICE_FOLDER_ID",                       # папка з прайсами ETI/CHINT
-    "ETI_FILE_SEARCH", "ETI_TAB_NAME", "ETI_DISCOUNT",
-    "CHINT_FILE_SEARCH", "CHINT_TAB_NAME", "CHINT_DISCOUNT",
+    "SHEET_URL", "GOOGLE_SERVICE_ACCOUNT_JSON", "PRICE_FOLDER_ID",
+    "DATABASE_URL", "PRICE_SOURCE",
+    "ETI_DISCOUNT", "CHINT_DISCOUNT", "BDK_DISCOUNT", "BDK_VAT",
 ):
     if _key in _secrets:
         os.environ[_key] = str(_secrets[_key])
@@ -42,8 +41,8 @@ st.set_page_config(page_title="Оновлення цін", page_icon="⚡")
  
 st.title("⚡ Оновлення цін СЕС")
 st.caption(
-    "Натисни кнопку — скрипт знайде актуальні ціни (прайс ETI + прайс CHINT + Serper, якщо увімкнено) "
-    "і запише їх у таблицю. Заповнюються лише порожні комірки."
+    "Натисни кнопку — скрипт візьме найсвіжіші прайси з папки (ETI, CHINT, БДК, Kablex) "
+    "і оновить ціни в довіднику. Сумнівні позиції — на вкладці «На перевірку»."
 )
  
 # ── Відмітка останнього оновлення (читається з таблиці) ────────────
@@ -96,7 +95,7 @@ if st.button("🔄 Оновити ціни", type="primary"):
         try:
             with contextlib.redirect_stdout(writer):
                 price_finder.run_update()
-        except Exception as e:        # будь-яка помилка — показуємо, не валимо застосунок
+        except (Exception, SystemExit) as e:   # будь-яка помилка — показуємо, не валимо застосунок
             ok, err = False, e
  
     log = writer.full_text()
